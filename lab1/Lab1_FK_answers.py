@@ -127,12 +127,17 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
 
     motion_data = np.zeros_like(motion_data_A)
 
-    for joint_list, joint_remove in zip([joint_name_A, joint_name_T], [joint_remove_A, joint_remove_T]):
+    for joint_list, joint_remove in zip(
+        [joint_name_A, joint_name_T], [joint_remove_A, joint_remove_T]
+    ):
         for i in joint_list:
             if "_end" not in i:
                 joint_remove.append(i)
 
-    motion_dict = {name: motion_data_A[:, 3 * index : 3 * (index + 1)] for index, name in enumerate(joint_remove_A)}
+    motion_dict = {
+        name: motion_data_A[:, 3 * index : 3 * (index + 1)]
+        for index, name in enumerate(joint_remove_A)
+    }
 
     for index, name in enumerate(joint_remove_T):
         if name == "lShoulder":
