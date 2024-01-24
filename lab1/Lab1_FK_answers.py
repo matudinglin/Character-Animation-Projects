@@ -30,7 +30,6 @@ def part1_calculate_T_pose(bvh_file_path):
     Tips:
         joint_name顺序应该和bvh一致
     """
-
     lines = None
     # Read the file
     with open(bvh_file_path, "r") as f:
@@ -97,12 +96,12 @@ def part2_forward_kinematics(
             end_count += 1
             quat = R.from_quat([0, 0, 0, 1])
             quat_parent = R.from_quat(joint_orientations[parent])
-            joint_orientations.append((quat * quat_parent).as_quat())
+            joint_orientations.append((quat_parent * quat).as_quat())
             joint_positions.append(joint_positions[parent] + quat_parent.apply(offset))
         else:
             quat = rot_data[i - end_count]
             quat_parent = R.from_quat(joint_orientations[parent])
-            joint_orientations.append((quat * quat_parent).as_quat())
+            joint_orientations.append((quat_parent * quat).as_quat())
             joint_positions.append(joint_positions[parent] + quat_parent.apply(offset))
 
     return np.array(joint_positions), np.array(joint_orientations)
@@ -118,5 +117,29 @@ def part3_retarget_func(T_pose_bvh_path, A_pose_bvh_path):
         两个bvh的joint name顺序可能不一致哦(
         as_euler时也需要大写的XYZ
     """
-    motion_data = None
+    joint_remove_A, joint_remove_T = [], []
+
+    joint_name_T, _, _ = part1_calculate_T_pose(T_pose_bvh_path)
+    joint_name_A, _, _ = part1_calculate_T_pose(A_pose_bvh_path)
+
+    motion_data_A = load_motion_data(A_pose_bvh_path)
+    root_position, motion_data_A = motion_data_A[:, :3], motion_data_A[:, 3:]
+
+    motion_data = np.zeros_like(motion_data_A)
+
+    for joint_list, joint_remove in zip([joint_name_A, joint_name_T], [joint_remove_A, joint_remove_T]):
+        for i in joint_list:
+            if "_end" not in i:
+                joint_remove.append(i)
+
+    motion_dict = {name: motion_data_A[:, 3 * index : 3 * (index + 1)] for index, name in enumerate(joint_remove_A)}
+
+    for index, name in enumerate(joint_remove_T):
+        if name == "lShoulder":
+            motion_dict[name][:, 2] -= 45
+        elif name == "rShoulder":
+            motion_dict[name][:, 2] += 45
+        motion_data[:, 3 * index : 3 * (index + 1)] = motion_dict[name]
+
+    motion_data = np.concatenate([root_position, motion_data], axis=1)
     return motion_data
