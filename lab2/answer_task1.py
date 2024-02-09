@@ -310,10 +310,25 @@ def concatenate_two_motions(bvh_motion1, bvh_motion2, mix_frame1, mix_time):
     '''
     res = bvh_motion1.raw_copy()
     
-    # TODO: 你的代码
-    # 下面这种直接拼肯定是不行的(
-    res.joint_position = np.concatenate([res.joint_position[:mix_frame1], bvh_motion2.joint_position], axis=0)
-    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1], bvh_motion2.joint_rotation], axis=0)
-    
+    # Align the facing direction
+    rotation = bvh_motion1.joint_rotation[mix_frame1, 0]
+    target_direction = R.from_quat(rotation).apply(np.array([0, 0, 1])).flatten()[[0, 2]]
+    new_bvh_motion2 = bvh_motion2.translation_and_rotation(0, bvh_motion1.joint_position[mix_frame1, 0, [0, 2]], target_direction)
+
+    # Linear blending
+    blending_joint_position = np.zeros((mix_time, new_bvh_motion2.joint_position.shape[1], new_bvh_motion2.joint_position.shape[2]))
+    blending_joint_rotation = np.zeros((mix_time, new_bvh_motion2.joint_rotation.shape[1], new_bvh_motion2.joint_rotation.shape[2]))
+    blending_joint_rotation[..., 3] = 1.0
+    for i in range(mix_time):
+        t = i / mix_time
+        t = min(1, max(0, t))
+        blending_joint_position[i] = (1 - t) * res.joint_position[mix_frame1] + t * new_bvh_motion2.joint_position[0]
+        for j in range(len(res.joint_rotation[mix_frame1])):
+            blending_joint_rotation[i, j] = Slerp([0, 1], R.from_quat([res.joint_rotation[mix_frame1, j], new_bvh_motion2.joint_rotation[0, j]]))(t).as_quat()
+    new_bvh_motion2.joint_position = np.concatenate([blending_joint_position,  new_bvh_motion2.joint_position], axis=0)
+    new_bvh_motion2.joint_rotation = np.concatenate([blending_joint_rotation,  new_bvh_motion2.joint_rotation], axis=0)
+    res.joint_position = np.concatenate([res.joint_position[:mix_frame1],  new_bvh_motion2.joint_position], axis=0)
+    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1],  new_bvh_motion2.joint_rotation], axis=0)
+
     return res
 
