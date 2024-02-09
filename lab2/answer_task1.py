@@ -238,8 +238,8 @@ class BVHMotion():
         cross = np.cross(target_facing_direction_xz, forward_direction) / target_direction_norm
         dot = np.dot(target_facing_direction_xz, forward_direction) / target_direction_norm
         
-        theta = np.arccos(cross)
-        if dot < 0:
+        theta = np.arccos(dot)
+        if cross < 0:
             theta = 2 * np.pi - theta
         new_root_Ry = R.from_euler("Y", theta, degrees=False)
         Ry, _ = self.decompose_rotation_with_yaxis(res.joint_rotation[frame_num, 0, :])
@@ -259,15 +259,31 @@ def blend_two_motions(bvh_motion1, bvh_motion2, alpha):
     返回的动作应该有n3帧，第i帧由(1-alpha[i]) * bvh_motion1[j] + alpha[i] * bvh_motion2[k]得到
     i均匀地遍历0~n3-1的同时，j和k应该均匀地遍历0~n1-1和0~n2-1
     '''
-    
     res = bvh_motion1.raw_copy()
     res.joint_position = np.zeros((len(alpha), res.joint_position.shape[1], res.joint_position.shape[2]))
     res.joint_rotation = np.zeros((len(alpha), res.joint_rotation.shape[1], res.joint_rotation.shape[2]))
-    res.joint_rotation[...,3] = 1.0
+    res.joint_rotation[..., 3] = 1.0
 
-    # TODO: 你的代码
-    
+    n1 = len(bvh_motion1.joint_position)
+    n2 = len(bvh_motion2.joint_position)
+    num_frames = len(alpha)
+    for i in range(num_frames):
+        j = int( i * n1 / num_frames)
+        k = int( i * n2 / num_frames)
+        # Translation
+        res.joint_position[i, :, :] = (1-alpha[i]) * bvh_motion1.joint_position[j, :, :] + alpha[i] * bvh_motion2.joint_position[k, :, :]
+        # Rotation
+        alpha[i] = min(1, max(0, alpha[i]))
+        for l in range(len(res.joint_rotation[0])):
+            rotation_a = bvh_motion1.joint_rotation[j, l, :]
+            rotation_b = bvh_motion2.joint_rotation[k, l, :]
+
+            slerp = Slerp([0, 1], R.from_quat([rotation_a, rotation_b]))
+            
+            res.joint_rotation[i, l, :] = slerp(np.array(alpha[i])).as_quat()
+            
     return res
+
 
 # part3
 def build_loop_motion(bvh_motion):
