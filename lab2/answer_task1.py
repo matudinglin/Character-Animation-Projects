@@ -205,9 +205,9 @@ class BVHMotion():
         输入: rotation 形状为(4,)的ndarray, 四元数旋转
         输出: Ry, Rxz，分别为绕y轴的旋转和转轴在xz平面的旋转，并满足R = Ry * Rxz
         '''
-        Ry = np.zeros_like(rotation)
-        Rxz = np.zeros_like(rotation)
-        # TODO: 你的代码
+        Ry = R.from_quat(rotation).as_euler('XYZ', degrees=True)
+        Ry = R.from_euler('XYZ', [0, Ry[1], 0], degrees=True)
+        Rxz = Ry.inv() * R.from_quat(rotation)
         
         return Ry, Rxz
     
@@ -228,10 +228,26 @@ class BVHMotion():
         
         res = self.raw_copy() # 拷贝一份，不要修改原始数据
         
-        # 比如说，你可以这样调整第frame_num帧的根节点平移
+        # Translation
         offset = target_translation_xz - res.joint_position[frame_num, 0, [0,2]]
         res.joint_position[:, 0, [0,2]] += offset
-        # TODO: 你的代码
+        
+        # Rotation
+        forward_direction = np.array([0, 1])
+        target_direction_norm = np.linalg.norm(target_facing_direction_xz)
+        cross = np.cross(target_facing_direction_xz, forward_direction) / target_direction_norm
+        dot = np.dot(target_facing_direction_xz, forward_direction) / target_direction_norm
+        
+        theta = np.arccos(cross)
+        if dot < 0:
+            theta = 2 * np.pi - theta
+        new_root_Ry = R.from_euler("Y", theta, degrees=False)
+        Ry, _ = self.decompose_rotation_with_yaxis(res.joint_rotation[frame_num, 0, :])
+
+        res.joint_rotation[:, 0, :] = (new_root_Ry * Ry.inv() * R.from_quat(res.joint_rotation[:, 0, :])).as_quat()
+        for i in range(len(res.joint_position)):
+             res.joint_position[i, 0,:] = (new_root_Ry * Ry.inv()).as_matrix()  @ (res.joint_position[i, 0, :] - res.joint_position[frame_num, 0, :]) + res.joint_position[frame_num,0,:]
+        
         return res
 
 # part2
