@@ -4,13 +4,54 @@ from answer_task1 import *
 
 class CharacterController():
     def __init__(self, controller) -> None:
-        self.motions = []
-        self.motions.append(BVHMotion('motion_material/walk_forward.bvh'))
+        self.motion_state = "idle"
+        self.motions = {
+            "walk" : build_loop_motion(BVHMotion('motion_material/walk_forward.bvh')),
+            "idle" : build_loop_motion(BVHMotion('motion_material/idle.bvh')),
+            "right" : build_loop_motion(BVHMotion('motion_material/walk_and_turn_right.bvh')),
+            "left" : build_loop_motion(BVHMotion('motion_material/walk_and_turn_left.bvh'))
+        }
+        
+        # self.motion_database = []
+        # for motion in self.motions:
+        #     for frame in range(motion.motion_length):
+        #         features = {
+        #             'position': motion.joint_position[frame, 0, :],  # Example for root bone
+        #             'rotation': motion.joint_rotation[frame, 0, :],
+        #             'velocity': motion.calculate_velocity(frame, 0),  # You'd need to implement calculate_velocity
+        #             'angular_velocity': motion.calculate_angular_velocity(frame, 0)  # Implement calculate_angular_velocity
+        #         }
+        #         self.motion_database.append((motion, frame, features))
+        
+        
         self.controller = controller
         self.cur_root_pos = None
         self.cur_root_rot = None
         self.cur_frame = 0
-        pass
+    
+
+    # def find_best_match(self, desired_state):
+    #     # Find the best matching motion frame from the database
+    #     best_match = None
+    #     lowest_cost = float('inf')
+        
+    #     for motion, frame, features in self.motion_database:
+    #         cost = self.calculate_cost(desired_state, features)
+    #         if cost < lowest_cost:
+    #             best_match = (motion, frame)
+    #             lowest_cost = cost
+                
+    #     return best_match
+
+    # def calculate_cost(self, desired, actual):
+    #     # Calculate the cost between desired state and actual motion features
+    #     pos_cost = np.linalg.norm(desired['position'] - actual['position'])
+    #     rot_cost = np.linalg.norm(desired['rotation'] - actual['rotation'])  # Simplification, consider using a better metric
+    #     vel_cost = np.linalg.norm(desired['velocity'] - actual['velocity'])
+    #     avel_cost = np.linalg.norm(desired['angular_velocity'] - actual['angular_velocity'])
+        
+    #     total_cost = pos_cost + rot_cost + vel_cost + avel_cost
+    #     return total_cost
     
     def update_state(self, 
                      desired_pos_list, 
@@ -38,15 +79,44 @@ class CharacterController():
             分别对应着面朝向移动速度,侧向移动速度和向后移动速度.目前根据LAFAN的统计数据设为(1.75,1.5,1.25)
             如果和你的角色动作速度对不上,你可以在init或这里对属性进行修改
         '''
-        # 一个简单的例子，输出第i帧的状态
-        joint_name = self.motions[0].joint_name
-        joint_translation, joint_orientation = self.motions[0].batch_forward_kinematics()
+        # # Simplified desired state for matching. Here, we use the first frame's desired state as an example.
+        # desired_state = {
+        #     'position': desired_pos_list[0],
+        #     'rotation': desired_rot_list[0],
+        #     'velocity': desired_vel_list[0],
+        #     'angular_velocity': desired_avel_list[0]
+        # }
+        
+        # best_match = self.find_best_match(desired_state)
+        # motion, frame = best_match
+        
+        # # Set current motion state based on best match
+        # self.cur_root_pos, self.cur_root_rot = motion.joint_position[frame, 0, :], motion.joint_rotation[frame, 0, :]
+        # self.cur_frame = frame  # Simplification, actual implementation might need adjustments
+        
+        # joint_name = motion.joint_name
+        # joint_translation, joint_orientation = motion.batch_forward_kinematics()
+        # joint_translation = joint_translation[frame]
+        # joint_orientation = joint_orientation[frame]
+        
+        # if desired)_vel > 0 , use walk motion, else use idle motion
+        vel = np.linalg.norm(desired_vel_list[0])
+        if vel > 0.1: 
+            next_state = "walk"
+        else:
+            next_state = "idle"
+        
+        self.motion_state = next_state
+        
+        self.cur_frame = (self.cur_frame + 1) % self.motions[self.motion_state].joint_position.shape[0]
+            
+        self.cur_root_pos = self.motions[self.motion_state].joint_position[self.cur_frame, 0, :]
+        self.cur_root_rot = self.motions[self.motion_state].joint_rotation[self.cur_frame, 0, :]
+            
+        joint_name = self.motions[self.motion_state].joint_name
+        joint_translation, joint_orientation = self.motions[self.motion_state].batch_forward_kinematics()
         joint_translation = joint_translation[self.cur_frame]
         joint_orientation = joint_orientation[self.cur_frame]
-        
-        self.cur_root_pos = joint_translation[0]
-        self.cur_root_rot = joint_orientation[0]
-        self.cur_frame = (self.cur_frame + 1) % self.motions[0].motion_length
         
         return joint_name, joint_translation, joint_orientation
     
